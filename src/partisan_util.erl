@@ -287,6 +287,12 @@ parse_listen_address(#{ip := IPAddress, port := N} = Addr)
 when ?IS_IP(IPAddress) andalso ?IS_PORT_NBR(N) ->
     Addr;
 
+%% Custom transports may use non-IP addresses (e.g., {:vsock, Path} or CID integers).
+%% Pass through without IP validation when a transport module is specified.
+parse_listen_address(#{port := N, transport := _Transport} = Addr)
+when ?IS_PORT_NBR(N) ->
+    Addr;
+
 parse_listen_address(#{ip := IP, port := N}) ->
     #{ip => parse_ip_address(IP), port => parse_port_nbr(N)};
 
