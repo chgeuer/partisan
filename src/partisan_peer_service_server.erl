@@ -87,16 +87,25 @@ start_custom(Socket) ->
     Pid = proc_lib:spawn_link(fun() ->
         put({partisan_peer_service_server, ingress_delay},
             partisan_config:get(ingress_delay, 0)),
-        send_message(Socket, {hello, partisan:node()}),
-        %% Set {active, once} so the gen_server receives {tcp, Socket, Data}
-        %% messages for incoming Partisan protocol frames.
-        partisan_peer_socket:setopts(Socket, [{active, once}]),
-        State0 = #state{socket = Socket, ref = undefined},
-        State = maybe_enable_ping(
-            State0,
-            partisan_config:get(connection_ping, #{})
-        ),
-        gen_server:enter_loop(?MODULE, [], State)
+        ?LOG_INFO(#{description => "start_custom: sending hello", node => partisan:node()}),
+        try
+            send_message(Socket, {hello, partisan:node()}),
+            ?LOG_INFO(#{description => "start_custom: hello sent, setting active once"}),
+            partisan_peer_socket:setopts(Socket, [{active, once}]),
+            ?LOG_INFO(#{description => "start_custom: entering gen_server loop"}),
+            State0 = #state{socket = Socket, ref = undefined},
+            State = maybe_enable_ping(
+                State0,
+                partisan_config:get(connection_ping, #{})
+            ),
+            gen_server:enter_loop(?MODULE, [], State)
+        catch
+            Class:Reason:Stack ->
+                ?LOG_ERROR(#{description => "start_custom crashed",
+                             class => Class, reason => Reason,
+                             stacktrace => Stack}),
+                exit(Reason)
+        end
     end),
     {ok, Pid}.
 
