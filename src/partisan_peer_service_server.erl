@@ -88,6 +88,9 @@ start_custom(Socket) ->
         put({partisan_peer_service_server, ingress_delay},
             partisan_config:get(ingress_delay, 0)),
         send_message(Socket, {hello, partisan:node()}),
+        %% Set {active, once} so the gen_server receives {tcp, Socket, Data}
+        %% messages for incoming Partisan protocol frames.
+        partisan_peer_socket:setopts(Socket, [{active, once}]),
         State0 = #state{socket = Socket, ref = undefined},
         State = maybe_enable_ping(
             State0,
