@@ -28,6 +28,7 @@
 %% public api
 
 -export([start_link/2]).
+-export([start_link/3]).
 
 %% gen_server api
 
@@ -41,26 +42,45 @@
 %% public api
 
 start_link(PeerIP, PeerPort) ->
-    gen_server:start_link(?MODULE, [PeerIP, PeerPort], []).
+    start_link(PeerIP, PeerPort, gen_tcp).
+
+start_link(PeerIP, PeerPort, Transport) ->
+    gen_server:start_link(?MODULE, [PeerIP, PeerPort, Transport], []).
 
 %% gen_server api
 
-init([PeerIP, PeerPort]) ->
+init([PeerIP, PeerPort, Transport]) when Transport =:= gen_tcp ->
+    %% Standard TCP path — uses the acceptor pool as before
     AcceptorPoolSize = application:get_env(partisan, acceptor_pool_size, 10),
-    % Trapping exit so can close socket in terminate/2
     _ = process_flag(trap_exit, true),
     Opts = [{active, once}, {mode, binary}, {ip, PeerIP}, {packet, 4},
             {reuseaddr, true}, {nodelay, true}, {keepalive, true}],
     case gen_tcp:listen(PeerPort, Opts) of
         {ok, Socket} ->
-            %% if the port is to be system allocated we need to set
-            %% it in the config
             ok = maybe_update_port_config(PeerIP, PeerPort, Socket),
-            %% acceptor could close the socket if there is a problem
-            %% eqwalizer:ignore Socket
             MRef = monitor(port, Socket),
             partisan_acceptor_pool:accept_socket(Socket, AcceptorPoolSize),
-            {ok, {Socket, MRef}};
+            {ok, {Socket, MRef, gen_tcp}};
+        {error, Reason} ->
+            {stop, Reason}
+    end;
+
+init([PeerIP, PeerPort, Transport]) ->
+    %% Custom transport path — runs its own accept loop since the
+    %% acceptor pool's acceptor_loop hardcodes gen_tcp:accept.
+    _ = process_flag(trap_exit, true),
+    Opts = [{active, once}, {mode, binary}, {ip, PeerIP}, {packet, 4},
+            {reuseaddr, true}, {nodelay, true}, {keepalive, true}],
+    case Transport:listen(PeerPort, Opts) of
+        {ok, Socket} ->
+            ?LOG_INFO(#{
+                description => "Partisan custom transport listening",
+                transport => Transport,
+                ip_address => PeerIP,
+                port_number => PeerPort
+            }),
+            self() ! accept,
+            {ok, {Socket, undefined, Transport}};
         {error, Reason} ->
             {stop, Reason}
     end.
@@ -71,6 +91,28 @@ handle_call(Req, _, State) ->
 handle_cast(Req, State) ->
     {stop, {bad_cast, Req}, State}.
 
+handle_info(accept, {ListenSocket, _, Transport} = State) when Transport =/= gen_tcp ->
+    %% Custom transport accept loop
+    case Transport:accept(ListenSocket) of
+        {ok, ClientSocket} ->
+            WrappedSocket = partisan_peer_socket:accept(ClientSocket, Transport),
+            {ok, _Pid} = partisan_peer_service_server:start_custom(WrappedSocket),
+            self() ! accept,
+            {noreply, State};
+        {error, timeout} ->
+            self() ! accept,
+            {noreply, State};
+        {error, Reason} ->
+            ?LOG_WARNING(#{
+                description => "Custom transport accept error",
+                transport => Transport,
+                reason => Reason
+            }),
+            erlang:send_after(100, self(), accept),
+            {noreply, State}
+    end;
+handle_info({'DOWN', MRef, port, Socket, Reason}, {Socket, MRef, _Transport} = State) ->
+    {stop, Reason, State};
 handle_info({'DOWN', MRef, port, Socket, Reason}, {Socket, MRef} = State) ->
     {stop, Reason, State};
 handle_info(_, State) ->
@@ -79,9 +121,10 @@ handle_info(_, State) ->
 code_change(_, State, _) ->
     {ok, State}.
 
+terminate(_, {Socket, _MRef, Transport}) ->
+    _ = (catch Transport:close(Socket)),
+    ok;
 terminate(_, {Socket, _MRef}) ->
-    % Socket may already be down but need to ensure it is closed to avoid
-    % eaddrinuse error on restart
     _ = (catch gen_tcp:close(Socket)),
     ok.
 

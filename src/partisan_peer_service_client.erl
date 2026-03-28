@@ -312,7 +312,7 @@ when is_atom(Node), is_atom(Channel), is_map(ChannelOpts) ->
             connect(ListenAddr, Channel, ChannelOpts)
     end;
 
-connect(#{ip := Address, port := Port}, Channel, ChannelOpts)
+connect(#{ip := Address, port := Port} = ListenAddr, Channel, ChannelOpts)
 when is_atom(Channel), is_map(ChannelOpts) ->
     SocketOpts = [
         binary,
@@ -323,9 +323,16 @@ when is_atom(Channel), is_map(ChannelOpts) ->
 
     Opts = [{monotonic, maps:get(monotonic, ChannelOpts, false)}],
 
-    Result = partisan_peer_socket:connect(
-        Address, Port, SocketOpts, ?TIMEOUT, Opts
-    ),
+    Result = case maps:get(transport, ListenAddr, undefined) of
+        undefined ->
+            partisan_peer_socket:connect(
+                Address, Port, SocketOpts, ?TIMEOUT, Opts
+            );
+        Transport ->
+            partisan_peer_socket:connect(
+                Address, Port, SocketOpts, ?TIMEOUT, Opts, Transport
+            )
+    end,
 
     case Result of
         {ok, Socket} ->

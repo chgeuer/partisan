@@ -28,9 +28,9 @@
 -module(partisan_peer_socket).
 
 -record(partisan_peer_socket, {
-    socket              :: gen_tcp:socket() | ssl:sslsocket() | socket:socket(),
-    transport           :: gen_tcp | ssl,
-    control             :: inet | ssl,
+    socket              :: gen_tcp:socket() | ssl:sslsocket() | socket:socket() | term(),
+    transport           :: gen_tcp | ssl | module(),
+    control             :: inet | ssl | module(),
     monotonic = false   :: boolean()
 }).
 
@@ -43,10 +43,12 @@
 
 
 -export([accept/1]).
+-export([accept/2]).
 -export([close/1]).
 -export([connect/3]).
 -export([connect/4]).
 -export([connect/5]).
+-export([connect/6]).
 -export([recv/2]).
 -export([recv/3]).
 -export([send/2]).
@@ -95,6 +97,27 @@ accept(TCPSocket) ->
                 control = inet
             }
     end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Wraps a socket accepted by a custom transport module.
+%% The transport module must implement send/2, recv/2, recv/3, close/1.
+%% The control module must implement setopts/2 (use the transport module
+%% itself if it supports setopts/2, or `inet' as a fallback).
+%% @end
+%% -----------------------------------------------------------------------------
+-spec accept(gen_tcp:socket() | term(), module()) -> t().
+
+accept(Socket, Transport) when is_atom(Transport) ->
+    Control = case erlang:function_exported(Transport, setopts, 2) of
+        true -> Transport;
+        false -> inet
+    end,
+    #partisan_peer_socket{
+        socket = Socket,
+        transport = Transport,
+        control = Control
+    }.
 
 
 %% -----------------------------------------------------------------------------
@@ -257,7 +280,34 @@ when is_map(PartisanOptions) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Returns the wrapped socket from within the connection.
+%% @doc Connect using an explicit transport module.
+%% The transport module must implement connect/4 (Address, Port, Opts, Timeout)
+%% with the same interface as gen_tcp:connect/4.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec connect(
+    inet:socket_address() | inet:hostname(),
+    inet:port_number(),
+    options(),
+    timeout(),
+    map() | list(),
+    module()) -> {ok, t()} | {error, inet:posix()}.
+
+connect(Address, Port, Options0, Timeout, PartisanOptions, Transport)
+when is_atom(Transport) ->
+    Options = connection_options(Options0),
+    POpts = case is_list(PartisanOptions) of
+        true -> maps:from_list(PartisanOptions);
+        false -> PartisanOptions
+    end,
+    Control = case erlang:function_exported(Transport, setopts, 2) of
+        true -> Transport;
+        false -> inet
+    end,
+    do_connect(Address, Port, Options, Timeout, Transport, Control, POpts).
+
+
+%% -----------------------------------------------------------------------------
 %% @end
 %% -----------------------------------------------------------------------------
 -spec socket(t()) -> gen_tcp:socket() | ssl:sslsocket().

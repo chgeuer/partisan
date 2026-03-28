@@ -74,6 +74,11 @@ init([]) ->
 
 
 %% @private
+socket(#{ip := IP, port := Port, transport := Transport}) ->
+    #{
+        id => {partisan_acceptor_socket, IP, Port},
+        start => {partisan_acceptor_socket, start_link, [IP, Port, Transport]}
+    };
 socket(#{ip := IP, port := Port}) ->
     #{
         id => {partisan_acceptor_socket, IP, Port},

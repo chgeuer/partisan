@@ -33,6 +33,9 @@
          acceptor_continue/3,
          acceptor_terminate/2]).
 
+%% Custom transport support
+-export([start_custom/1]).
+
 %% gen_server callbacks
 -export([init/1,
          handle_call/3,
@@ -71,6 +74,28 @@ acceptor_terminate(Reason, _) ->
     %% Something went wrong. Either the acceptor_pool is terminating
     %% or the accept failed.
     exit(Reason).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Start a peer service server for a connection accepted by a custom
+%% transport. The Socket must already be a partisan_peer_socket:t() wrapper.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec start_custom(partisan_peer_socket:t()) -> {ok, pid()}.
+
+start_custom(Socket) ->
+    Pid = proc_lib:spawn_link(fun() ->
+        put({partisan_peer_service_server, ingress_delay},
+            partisan_config:get(ingress_delay, 0)),
+        send_message(Socket, {hello, partisan:node()}),
+        State0 = #state{socket = Socket, ref = undefined},
+        State = maybe_enable_ping(
+            State0,
+            partisan_config:get(connection_ping, #{})
+        ),
+        gen_server:enter_loop(?MODULE, [], State)
+    end),
+    {ok, Pid}.
 
 
 
