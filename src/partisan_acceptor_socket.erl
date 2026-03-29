@@ -96,7 +96,15 @@ handle_info(accept, {ListenSocket, _, Transport} = State) when Transport =/= gen
     case Transport:accept(ListenSocket) of
         {ok, ClientSocket} ->
             WrappedSocket = partisan_peer_socket:accept(ClientSocket, Transport),
-            {ok, _Pid} = partisan_peer_service_server:start_custom(WrappedSocket),
+            try
+                {ok, _Pid} = partisan_peer_service_server:start_custom(WrappedSocket),
+                ?LOG_INFO(#{description => "Custom transport: connection accepted and server started"})
+            catch
+                Class:Reason:Stack ->
+                    ?LOG_ERROR(#{description => "Custom transport: start_custom failed",
+                                 class => Class, reason => Reason,
+                                 stacktrace => Stack})
+            end,
             self() ! accept,
             {noreply, State};
         {error, timeout} ->
