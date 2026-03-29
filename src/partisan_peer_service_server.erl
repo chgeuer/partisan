@@ -85,14 +85,13 @@ acceptor_terminate(Reason, _) ->
 
 start_custom(Socket) ->
     Pid = proc_lib:spawn_link(fun() ->
+        %% Wait for socket ownership transfer
+        receive {socket_transferred, ok} -> ok end,
         put({partisan_peer_service_server, ingress_delay},
             partisan_config:get(ingress_delay, 0)),
-        ?LOG_INFO(#{description => "start_custom: sending hello", node => partisan:node()}),
         try
             send_message(Socket, {hello, partisan:node()}),
-            ?LOG_INFO(#{description => "start_custom: hello sent, setting active once"}),
             partisan_peer_socket:setopts(Socket, [{active, once}]),
-            ?LOG_INFO(#{description => "start_custom: entering gen_server loop"}),
             State0 = #state{socket = Socket, ref = undefined},
             State = maybe_enable_ping(
                 State0,
@@ -107,6 +106,11 @@ start_custom(Socket) ->
                 exit(Reason)
         end
     end),
+    %% Transfer socket ownership to the server process so it receives
+    %% {tcp, Socket, Data} messages from {active, once}.
+    RawSocket = partisan_peer_socket:socket(Socket),
+    ok = transfer_ownership(RawSocket, Pid),
+    Pid ! {socket_transferred, ok},
     {ok, Pid}.
 
 
@@ -409,3 +413,10 @@ send_pong(State, #ping{id = Id, timestamp = Ts}) ->
         timestamp = Ts
     },
     send_message(State#state.socket, Pong).
+%% @private
+%% Transfer socket ownership for both gen_tcp and custom transport sockets.
+transfer_ownership(Socket, Pid) when is_port(Socket) ->
+    gen_tcp:controlling_process(Socket, Pid);
+transfer_ownership(_Socket, _Pid) ->
+    %% Custom transport sockets (structs) — fd-based, no ownership transfer needed.
+    ok.
