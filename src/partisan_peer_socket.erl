@@ -300,11 +300,9 @@ when is_atom(Transport) ->
         true -> maps:from_list(PartisanOptions);
         false -> PartisanOptions
     end,
-    Control = case erlang:function_exported(Transport, setopts, 2) of
-        true -> Transport;
-        false -> inet
-    end,
-    do_connect(Address, Port, Options, Timeout, Transport, Control, POpts).
+    %% Custom transports must handle setopts themselves.
+    %% We set Control = Transport directly (the transport module IS the control module).
+    do_connect(Address, Port, Options, Timeout, Transport, Transport, POpts).
 
 
 %% -----------------------------------------------------------------------------

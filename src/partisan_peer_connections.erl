@@ -618,7 +618,15 @@ store(
     #{ip := IP, port := Port} = ListenAddr
 ) when is_pid(Pid)
 andalso is_atom(Channel) andalso Channel =/= '_'
-andalso ?IS_IP(IP) andalso is_integer(Port) andalso Port >= 0 ->
+andalso is_integer(Port) andalso Port >= 0 ->
+
+    %% Validate IP: standard inet addresses OR custom transport addresses
+    case IP of
+        _ when ?IS_IP(IP) -> ok;
+        {vsock, _} -> ok;  %% Custom transport address
+        _ when is_tuple(IP) -> ok;  %% Any other custom address tuple
+        _ -> error(badarg)
+    end,
 
     %% We insert separately as we have N connections per node.
     Conn = #partisan_peer_connection{
