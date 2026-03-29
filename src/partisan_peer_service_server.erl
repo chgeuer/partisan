@@ -130,9 +130,9 @@ handle_cast(Req, State) ->
 
 
 handle_info({Tag, _RawSocket, Data}, #state{} = State)
-when ?DATA_MSG(Tag), is_binary(Data) ->
+when ?DATA_MSG(Tag) ->
+    ?LOG_INFO(#{description => "Server received data", data_size => byte_size(Data)}),
     Msg = binary_to_term(Data),
-    ?LOG_INFO(#{description => "Server received data", message => Msg}),
     ok = maybe_delay(),
     ok = reset_socket_opts(State),
     handle_inbound(Msg, State);
