@@ -130,9 +130,9 @@ handle_cast(Req, State) ->
 
 
 handle_info({Tag, _RawSocket, Data}, #state{} = State)
-when ?DATA_MSG(Tag) ->
+when ?DATA_MSG(Tag), is_binary(Data) ->
     Msg = binary_to_term(Data),
-    ?LOG_TRACE("Received data from socket: ~p", [Msg]),
+    ?LOG_INFO(#{description => "Server received data", message => Msg}),
     ok = maybe_delay(),
     ok = reset_socket_opts(State),
     handle_inbound(Msg, State);
@@ -176,7 +176,8 @@ handle_info({timeout, Ref, ping_timeout}, #state{ping_tref = Ref} = State) ->
     }),
     maybe_send_ping(State);
 
-handle_info(_, State) ->
+handle_info(Msg, State) ->
+    ?LOG_WARNING(#{description => "Server unhandled message", message => Msg}),
     {noreply, State}.
 
 
