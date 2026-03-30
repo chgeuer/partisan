@@ -330,6 +330,7 @@ when is_atom(Channel), is_map(ChannelOpts) ->
             );
         Transport ->
             %% Check for level 2 interface (connect/2 with full listen_addr)
+            _ = code:ensure_loaded(Transport),
             case erlang:function_exported(Transport, connect, 2) of
                 true ->
                     Monotonic = maps:get(monotonic, ChannelOpts, false),

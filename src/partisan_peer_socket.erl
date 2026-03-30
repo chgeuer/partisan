@@ -121,6 +121,7 @@ accept(Socket, Transport) when is_atom(Transport) ->
 -spec accept(gen_tcp:socket() | term(), module(), map()) -> t().
 
 accept(Socket, Transport, Opts) when is_atom(Transport), is_map(Opts) ->
+    _ = code:ensure_loaded(Transport),
     Control = case erlang:function_exported(Transport, setopts, 2) of
         true -> Transport;
         false -> inet

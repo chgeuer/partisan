@@ -94,7 +94,7 @@ init([#{transport := Transport} = ListenAddr]) ->
     _ = process_flag(trap_exit, true),
     IP = maps:get(ip, ListenAddr, undefined),
     Port = maps:get(port, ListenAddr, 0),
-    Result = case erlang:function_exported(Transport, listen, 1) of
+    Result = case ensure_function_exported(Transport, listen, 1) of
         true ->
             Transport:listen(ListenAddr);
         false ->
@@ -171,6 +171,12 @@ terminate(_, {Socket, _MRef}) ->
     ok.
 
 %% private
+%% Ensure the module is loaded before checking for exports.
+%% erlang:function_exported/3 does not auto-load modules.
+ensure_function_exported(Module, Function, Arity) ->
+    _ = code:ensure_loaded(Module),
+    erlang:function_exported(Module, Function, Arity).
+
 maybe_update_port_config(PeerIP, 0, Socket) ->
     case inet:sockname(Socket) of
         {ok, {_IPAddress, Port}} ->
