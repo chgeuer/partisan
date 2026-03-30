@@ -632,8 +632,10 @@ andalso is_integer(Port) andalso Port >= 0 ->
     %% Validate IP: standard inet addresses OR custom transport addresses
     case IP of
         _ when ?IS_IP(IP) -> ok;
-        {vsock, _} -> ok;  %% Custom transport address
-        _ when is_tuple(IP) -> ok;  %% Any other custom address tuple
+        _ when is_binary(IP) -> ok;  %% Custom transport string address (e.g., namespace)
+        _ when is_atom(IP) -> ok;    %% Custom transport atom address
+        _ when is_tuple(IP) -> ok;   %% Custom transport tuple (e.g., {vsock, Path})
+        _ when is_list(IP) -> ok;    %% Charlist address
         _ -> error(badarg)
     end,
 
