@@ -336,9 +336,13 @@ when is_atom(Channel), is_map(ChannelOpts) ->
                     Monotonic = maps:get(monotonic, ChannelOpts, false),
                     case Transport:connect(ListenAddr, ?TIMEOUT) of
                         {ok, RawSocket} ->
-                            {ok, partisan_peer_socket:accept(
+                            PeerSocket = partisan_peer_socket:accept(
                                 RawSocket, Transport, #{monotonic => Monotonic}
-                            )};
+                            ),
+                            %% Level 2 transports don't receive SocketOpts, so
+                            %% set {active, once} explicitly after connecting.
+                            partisan_peer_socket:setopts(PeerSocket, [{active, once}]),
+                            {ok, PeerSocket};
                         {error, _} = Err ->
                             Err
                     end;
