@@ -329,9 +329,23 @@ when is_atom(Channel), is_map(ChannelOpts) ->
                 Address, Port, SocketOpts, ?TIMEOUT, Opts
             );
         Transport ->
-            partisan_peer_socket:connect(
-                Address, Port, SocketOpts, ?TIMEOUT, Opts, Transport
-            )
+            %% Check for level 2 interface (connect/2 with full listen_addr)
+            case erlang:function_exported(Transport, connect, 2) of
+                true ->
+                    Monotonic = maps:get(monotonic, ChannelOpts, false),
+                    case Transport:connect(ListenAddr, ?TIMEOUT) of
+                        {ok, RawSocket} ->
+                            {ok, partisan_peer_socket:accept(
+                                RawSocket, Transport, #{monotonic => Monotonic}
+                            )};
+                        {error, _} = Err ->
+                            Err
+                    end;
+                false ->
+                    partisan_peer_socket:connect(
+                        Address, Port, SocketOpts, ?TIMEOUT, Opts, Transport
+                    )
+            end
     end,
 
     case Result of

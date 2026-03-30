@@ -287,10 +287,11 @@ parse_listen_address(#{ip := IPAddress, port := N} = Addr)
 when ?IS_IP(IPAddress) andalso ?IS_PORT_NBR(N) ->
     Addr;
 
-%% Custom transports may use non-IP addresses (e.g., {:vsock, Path} or CID integers).
-%% Pass through without IP validation when a transport module is specified.
+%% Custom transports may use non-IP addresses (e.g., {:vsock, Path} or CID integers)
+%% and port 0 (for transports where port is not meaningful).
+%% Pass through without IP/port validation when a transport module is specified.
 parse_listen_address(#{port := N, transport := _Transport} = Addr)
-when ?IS_PORT_NBR(N) ->
+when is_integer(N), N >= 0, N =< 65535 ->
     Addr;
 
 parse_listen_address(#{ip := IP, port := N}) ->

@@ -535,6 +535,15 @@ listen_addr(
 ) when ?IS_IP(IP), is_integer(Port) ->
     Val;
 
+%% Custom transports may use non-IP addresses; accept any ip value when
+%% a transport module is specified in the listen_addr.
+listen_addr(
+    #partisan_peer_connection{
+        listen_addr = #{ip := _, port := Port, transport := _} = Val
+    }
+) when is_integer(Port) ->
+    Val;
+
 listen_addr(#partisan_peer_connection{} = T) ->
     ?NOT_GROUND_ERROR([T]).
 

@@ -27,6 +27,7 @@
 
 %% public api
 
+-export([start_link/1]).
 -export([start_link/2]).
 -export([start_link/3]).
 
@@ -40,6 +41,10 @@
          terminate/2]).
 
 %% public api
+
+%% Start with full listen_addr map (for custom transports that need extra config)
+start_link(#{transport := _} = ListenAddr) ->
+    gen_server:start_link(?MODULE, [ListenAddr], []).
 
 start_link(PeerIP, PeerPort) ->
     start_link(PeerIP, PeerPort, gen_tcp).
@@ -66,8 +71,7 @@ init([PeerIP, PeerPort, Transport]) when Transport =:= gen_tcp ->
     end;
 
 init([PeerIP, PeerPort, Transport]) ->
-    %% Custom transport path — runs its own accept loop since the
-    %% acceptor pool's acceptor_loop hardcodes gen_tcp:accept.
+    %% Custom transport with IP+Port — level 1 listen/2 interface
     _ = process_flag(trap_exit, true),
     Opts = [{active, once}, {mode, binary}, {ip, PeerIP}, {packet, 4},
             {reuseaddr, true}, {nodelay, true}, {keepalive, true}],
@@ -78,6 +82,36 @@ init([PeerIP, PeerPort, Transport]) ->
                 transport => Transport,
                 ip_address => PeerIP,
                 port_number => PeerPort
+            }),
+            self() ! accept,
+            {ok, {Socket, undefined, Transport}};
+        {error, Reason} ->
+            {stop, Reason}
+    end;
+
+init([#{transport := Transport} = ListenAddr]) ->
+    %% Custom transport with full listen_addr — check for level 2 listen/1
+    _ = process_flag(trap_exit, true),
+    IP = maps:get(ip, ListenAddr, undefined),
+    Port = maps:get(port, ListenAddr, 0),
+    Result = case erlang:function_exported(Transport, listen, 1) of
+        true ->
+            Transport:listen(ListenAddr);
+        false ->
+            Opts = [{active, once}, {mode, binary}, {packet, 4},
+                    {reuseaddr, true}, {nodelay, true}, {keepalive, true}
+                    | case IP of
+                        undefined -> [];
+                        _ -> [{ip, IP}]
+                      end],
+            Transport:listen(Port, Opts)
+    end,
+    case Result of
+        {ok, Socket} ->
+            ?LOG_INFO(#{
+                description => "Partisan custom transport listening (level 2)",
+                transport => Transport,
+                listen_addr => ListenAddr
             }),
             self() ! accept,
             {ok, {Socket, undefined, Transport}};

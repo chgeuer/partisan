@@ -74,6 +74,15 @@ init([]) ->
 
 
 %% @private
+%% Custom transport with full listen_addr — use start_link/1 so transport
+%% can access all address fields (namespace, auth, hybrid_connection, etc.)
+socket(#{transport := Transport} = ListenAddr) when Transport =/= gen_tcp ->
+    IP = maps:get(ip, ListenAddr, Transport),
+    Port = maps:get(port, ListenAddr, 0),
+    #{
+        id => {partisan_acceptor_socket, IP, Port},
+        start => {partisan_acceptor_socket, start_link, [ListenAddr]}
+    };
 socket(#{ip := IP, port := Port, transport := Transport}) ->
     #{
         id => {partisan_acceptor_socket, IP, Port},

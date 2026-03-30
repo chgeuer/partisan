@@ -64,8 +64,8 @@
                                 }.
 -type actor()               ::  binary().
 -type listen_addr()         ::  #{
-                                    ip := inet:ip_address(),
-                                    port := 1..65535,
+                                    ip := inet:ip_address() | term(),
+                                    port := 0..65535,
                                     transport => module()
                                 }.
 -type node_spec()           ::  #{
@@ -1620,6 +1620,10 @@ node_info([channels|T], Acc0, #{channels := Val} = Spec) ->
 node_info([listen_ip|T], Acc0, #{listen_addrs := [#{ip := Val} | _]} = Spec) ->
     Acc1 = Acc0#{listen_ip => Val},
     node_info(T, Acc1, Spec);
+
+%% Custom transport listen_addrs may not have a standard ip
+node_info([listen_ip|T], Acc0, Spec) ->
+    node_info(T, Acc0, Spec);
 
 node_info([listen_port|T], Acc0, #{listen_addrs := [#{port := Val} | _]} = Spec) ->
     Acc1 = Acc0#{listen_port => Val},

@@ -44,6 +44,7 @@
 
 -export([accept/1]).
 -export([accept/2]).
+-export([accept/3]).
 -export([close/1]).
 -export([connect/3]).
 -export([connect/4]).
@@ -109,6 +110,17 @@ accept(TCPSocket) ->
 -spec accept(gen_tcp:socket() | term(), module()) -> t().
 
 accept(Socket, Transport) when is_atom(Transport) ->
+    accept(Socket, Transport, #{}).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Wraps a socket accepted by a custom transport module, with options.
+%% Accepts an Opts map that may contain `monotonic => boolean()'.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec accept(gen_tcp:socket() | term(), module(), map()) -> t().
+
+accept(Socket, Transport, Opts) when is_atom(Transport), is_map(Opts) ->
     Control = case erlang:function_exported(Transport, setopts, 2) of
         true -> Transport;
         false -> inet
@@ -116,7 +128,8 @@ accept(Socket, Transport) when is_atom(Transport) ->
     #partisan_peer_socket{
         socket = Socket,
         transport = Transport,
-        control = Control
+        control = Control,
+        monotonic = maps:get(monotonic, Opts, false)
     }.
 
 
