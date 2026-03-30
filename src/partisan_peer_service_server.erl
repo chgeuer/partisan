@@ -107,9 +107,8 @@ start_custom(Socket) ->
         end
     end),
     %% Transfer socket ownership to the server process so it receives
-    %% {tcp, Socket, Data} messages from {active, once}.
-    RawSocket = partisan_peer_socket:socket(Socket),
-    ok = transfer_ownership(RawSocket, Pid),
+    %% {partisan_transport, Socket, Data} messages from {active, once}.
+    ok = transfer_ownership(Socket, Pid),
     Pid ! {socket_transferred, ok},
     {ok, Pid}.
 
@@ -415,8 +414,25 @@ send_pong(State, #ping{id = Id, timestamp = Ts}) ->
     send_message(State#state.socket, Pong).
 %% @private
 %% Transfer socket ownership for both gen_tcp and custom transport sockets.
-transfer_ownership(Socket, Pid) when is_port(Socket) ->
-    gen_tcp:controlling_process(Socket, Pid);
-transfer_ownership(_Socket, _Pid) ->
-    %% Custom transport sockets (structs) — fd-based, no ownership transfer needed.
+%% Accepts either a partisan_peer_socket:t() or a raw socket.
+transfer_ownership(PeerSocket, Pid) ->
+    try partisan_peer_socket:socket(PeerSocket) of
+        RawSocket ->
+            Transport = partisan_peer_socket:transport(PeerSocket),
+            transfer_ownership_raw(RawSocket, Transport, Pid)
+    catch
+        _:_ ->
+            %% Not a partisan_peer_socket record — treat as raw socket
+            transfer_ownership_raw(PeerSocket, undefined, Pid)
+    end.
+
+transfer_ownership_raw(RawSocket, _Transport, Pid) when is_port(RawSocket) ->
+    gen_tcp:controlling_process(RawSocket, Pid);
+transfer_ownership_raw(RawSocket, Transport, Pid) when is_atom(Transport), Transport =/= undefined ->
+    _ = code:ensure_loaded(Transport),
+    case erlang:function_exported(Transport, controlling_process, 2) of
+        true -> Transport:controlling_process(RawSocket, Pid);
+        false -> ok
+    end;
+transfer_ownership_raw(_RawSocket, _Transport, _Pid) ->
     ok.

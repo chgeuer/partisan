@@ -55,6 +55,7 @@
 -export([send/2]).
 -export([setopts/2]).
 -export([socket/1]).
+-export([transport/1]).
 
 
 
@@ -325,6 +326,11 @@ when is_atom(Transport) ->
 -spec socket(t()) -> gen_tcp:socket() | ssl:sslsocket().
 socket(Conn) ->
     Conn#partisan_peer_socket.socket.
+
+%% @doc Returns the transport module from a partisan_peer_socket record.
+-spec transport(t()) -> module().
+transport(Conn) ->
+    Conn#partisan_peer_socket.transport.
 
 
 
